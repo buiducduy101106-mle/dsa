@@ -7,8 +7,8 @@ import ControlPanel from './components/ControlPanel';
 import GridRenderer from './components/GridRenderer';
 import ScenarioLab, { ScenarioId } from './components/ScenarioLab';
 
-import { GridNode, AlgorithmType, SpeedType, ToolMode, AlgorithmMetrics } from './types';
-import { bfs, dfs, dijkstra, getNodesInShortestPathOrder } from './utils/algorithms';
+import { GridNode, AlgorithmType, SpeedType, ToolMode, AlgorithmMetrics, HeuristicType } from './types';
+import { bfs, dfs, dijkstra, astar, greedyBfs, getNodesInShortestPathOrder } from './utils/algorithms';
 import { generateRandomWalls, generateRecursiveDivision, generateSwampTerrain } from './utils/maze';
 
 const NUM_ROWS = 20;
@@ -28,6 +28,8 @@ export default function App() {
   const [toolMode, setToolMode] = useState<ToolMode>('wall');
   const [wallDensity, setWallDensity] = useState(0.25);
   const [currentScenario, setCurrentScenario] = useState<ScenarioId | null>(null);
+  const [allowDiagonal, setAllowDiagonal] = useState(false);
+  const [heuristicType, setHeuristicType] = useState<HeuristicType>('manhattan');
   
   // App status states
   const [isRunning, setIsRunning] = useState(false);
@@ -248,11 +250,15 @@ export default function App() {
     let visitedOrdered: GridNode[] = [];
 
     if (selectedAlgo === 'bfs') {
-      visitedOrdered = bfs(gridForSearch, startNode, endNode);
+      visitedOrdered = bfs(gridForSearch, startNode, endNode, allowDiagonal);
     } else if (selectedAlgo === 'dfs') {
-      visitedOrdered = dfs(gridForSearch, startNode, endNode);
+      visitedOrdered = dfs(gridForSearch, startNode, endNode, allowDiagonal);
     } else if (selectedAlgo === 'dijkstra') {
-      visitedOrdered = dijkstra(gridForSearch, startNode, endNode);
+      visitedOrdered = dijkstra(gridForSearch, startNode, endNode, allowDiagonal);
+    } else if (selectedAlgo === 'astar') {
+      visitedOrdered = astar(gridForSearch, startNode, endNode, allowDiagonal, heuristicType);
+    } else if (selectedAlgo === 'greedy') {
+      visitedOrdered = greedyBfs(gridForSearch, startNode, endNode, allowDiagonal, heuristicType);
     }
 
     const endTime = performance.now();
@@ -395,15 +401,17 @@ export default function App() {
       pathFound: boolean;
     }
   ) => {
-    const names = {
+    const names: Record<AlgorithmType, string> = {
       bfs: 'Breadth-First Search (BFS)',
       dfs: 'Depth-First Search (DFS)',
-      dijkstra: "Thuật toán Dijkstra"
+      dijkstra: 'Dijkstra',
+      astar: 'A* Search',
+      greedy: 'Greedy Best-First'
     };
 
-    const isOptimal = algoId === 'bfs' 
-      ? isGridUnweighted() // BFS optimal if uniform grid
-      : algoId === 'dijkstra';
+    const isOptimal = algoId === 'bfs'
+      ? isGridUnweighted()
+      : algoId === 'dijkstra' || algoId === 'astar';
 
     const newMetric: AlgorithmMetrics = {
       algorithmId: algoId,
@@ -444,7 +452,7 @@ export default function App() {
 
     setTimeout(() => {
       const results: AlgorithmMetrics[] = [];
-      const algos: AlgorithmType[] = ['bfs', 'dfs', 'dijkstra'];
+      const algos: AlgorithmType[] = ['bfs', 'dfs', 'dijkstra', 'astar', 'greedy'];
 
       for (const algo of algos) {
         // Clone grid separately for calculation
@@ -463,11 +471,15 @@ export default function App() {
           const iterEnd = iterGrid[endCoords.row][endCoords.col];
           
           if (algo === 'bfs') {
-            visitedOrdered = bfs(iterGrid, iterStart, iterEnd);
+            visitedOrdered = bfs(iterGrid, iterStart, iterEnd, allowDiagonal);
           } else if (algo === 'dfs') {
-            visitedOrdered = dfs(iterGrid, iterStart, iterEnd);
+            visitedOrdered = dfs(iterGrid, iterStart, iterEnd, allowDiagonal);
+          } else if (algo === 'dijkstra') {
+            visitedOrdered = dijkstra(iterGrid, iterStart, iterEnd, allowDiagonal);
+          } else if (algo === 'astar') {
+            visitedOrdered = astar(iterGrid, iterStart, iterEnd, allowDiagonal, heuristicType);
           } else {
-            visitedOrdered = dijkstra(iterGrid, iterStart, iterEnd);
+            visitedOrdered = greedyBfs(iterGrid, iterStart, iterEnd, allowDiagonal, heuristicType);
           }
         }
 
@@ -476,11 +488,15 @@ export default function App() {
 
         // Run one last tracking state to extract shortest path
         if (algo === 'bfs') {
-          visitedOrdered = bfs(localGrid, localStart, localEnd);
+          visitedOrdered = bfs(localGrid, localStart, localEnd, allowDiagonal);
         } else if (algo === 'dfs') {
-          visitedOrdered = dfs(localGrid, localStart, localEnd);
+          visitedOrdered = dfs(localGrid, localStart, localEnd, allowDiagonal);
+        } else if (algo === 'dijkstra') {
+          visitedOrdered = dijkstra(localGrid, localStart, localEnd, allowDiagonal);
+        } else if (algo === 'astar') {
+          visitedOrdered = astar(localGrid, localStart, localEnd, allowDiagonal, heuristicType);
         } else {
-          visitedOrdered = dijkstra(localGrid, localStart, localEnd);
+          visitedOrdered = greedyBfs(localGrid, localStart, localEnd, allowDiagonal, heuristicType);
         }
 
         const finalPathNode = localGrid[endCoords.row][endCoords.col];
@@ -492,15 +508,17 @@ export default function App() {
           ? shortestPath.reduce((acc, curr) => acc + (curr.isStart ? 0 : curr.weight), 0)
           : Infinity;
 
-        const names = {
+        const names: Record<AlgorithmType, string> = {
           bfs: 'Breadth-First Search (BFS)',
           dfs: 'Depth-First Search (DFS)',
-          dijkstra: "Thuật toán Dijkstra"
+          dijkstra: 'Dijkstra',
+          astar: 'A* Search',
+          greedy: 'Greedy Best-First'
         };
 
-        const isOptimal = algo === 'bfs' 
+        const isOptimal = algo === 'bfs'
           ? isGridUnweighted()
-          : algo === 'dijkstra';
+          : algo === 'dijkstra' || algo === 'astar';
 
         results.push({
           algorithmId: algo,
@@ -792,6 +810,10 @@ export default function App() {
               onGenerateSwampTerrain={handleSwampTerrainGen}
               wallDensity={wallDensity}
               onChangeWallDensity={setWallDensity}
+              allowDiagonal={allowDiagonal}
+              onChangeAllowDiagonal={setAllowDiagonal}
+              heuristicType={heuristicType}
+              onChangeHeuristicType={setHeuristicType}
             />
           </div>
 

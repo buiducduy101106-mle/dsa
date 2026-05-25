@@ -14,7 +14,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { GridNode, AlgorithmType } from '../types';
-import { bfs, dfs, dijkstra, getNodesInShortestPathOrder } from '../utils/algorithms';
+import { bfs, dfs, dijkstra, astar, greedyBfs, getNodesInShortestPathOrder } from '../utils/algorithms';
+
 
 export type ScenarioId = 'case1' | 'case2' | 'case3';
 

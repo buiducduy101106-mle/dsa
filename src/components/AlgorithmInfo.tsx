@@ -39,7 +39,7 @@ export default function AlgorithmInfo() {
       useCase: 'Tự động tạo mê cung, duyệt chu trình đồ thị khép kín.'
     },
     dijkstra: {
-      title: "Thuật toán Dijkstra's - Trọng số",
+      title: "Dijkstra's Algorithm — Tìm đường Trọng số",
       description: "Hạt nhân tối ưu hóa đường đi trên đồ thị có trọng số phức tạp. Thuật toán hoạt động bằng cách mở rộng liên tục nút có tổng chi phí thấp nhất từ khởi điểm.",
       pros: [
         'Đảm bảo tìm được đường có chi phí tích lũy thấp nhất tuyệt đối.',
@@ -53,6 +53,38 @@ export default function AlgorithmInfo() {
       complexitySpace: 'O(V)',
       optimal: 'Đúng tuyệt đối (Ngay cả khi có sình lầy)',
       useCase: 'Bản đồ Google Maps né tránh kẹt xe, AI tìm đường trong game chiến thuật.'
+    },
+    astar: {
+      title: 'A* Search — Tối ưu Heuristic',
+      description: 'Vua của tất cả thuật toán tìm đường. A* kết hợp chi phí thực tế g(n) từ điểm xuất phát với ước lượng heuristic h(n) tới đích: f(n) = g(n) + h(n). Nhờ vậy vừa đảm bảo tối ưu, vừa cực kỳ nhanh.',
+      pros: [
+        'Đảm bảo đường tối ưu như Dijkstra nhưng duyệt ít ô hơn rất nhiều nhờ hướng tới đích.',
+        'Đây là thuật toán tiêu chuẩn trong mọi AI game thực tế (Unity, Unreal Engine).'
+      ],
+      cons: [
+        'Cần thêm bộ nhớ để lưu fScore cho mỗi ô trong Open Set.',
+        'Chất lượng phụ thuộc vào hàm Heuristic h(n) được chọn.'
+      ],
+      complexityTime: 'O((V + E) log V)',
+      complexitySpace: 'O(V) — Open Set',
+      optimal: 'Đúng (khi Heuristic là admissible)',
+      useCase: 'AI tìm đường trong game, robot tự hành, Google Maps điều hướng thực tế.'
+    },
+    greedy: {
+      title: 'Greedy Best-First Search — Tham Lam Nhanh',
+      description: 'Triết lý cực đơn giản: luôn đi về phía có vẻ gần đích nhất. Greedy chỉ dùng heuristic h(n) mà bỏ qua chi phí đã đi g(n). Rất nhanh nhưng dễ bị bẫy bởi các vật cản hình chữ U.',
+      pros: [
+        'Tốc độ cực nhanh, duyệt số ô ít nhất trong hầu hết trường hợp bản đồ trơn.',
+        'Tiêu tốn ít bộ nhớ hơn A* vì không cần duy trì gScore tích lũy.'
+      ],
+      cons: [
+        'KHÔNG đảm bảo đường tối ưu — rất dễ bị lừa bởi cạm bẫy hình chữ U.',
+        'Bỏ qua trọng số địa hình, không phân biệt được đầm lầy hay bãi đất phẳng.'
+      ],
+      complexityTime: 'O(b^m) trong trường hợp xấu',
+      complexitySpace: 'O(b^m)',
+      optimal: 'Không tối ưu',
+      useCase: 'Game cần AI siêu nhanh, bản đồ mở không có bẫy, real-time pathfinding đơn giản.'
     }
   };
 
@@ -72,40 +104,33 @@ export default function AlgorithmInfo() {
       </div>
 
       {/* Tabs list with Sophisticated Dark style */}
-      <div className="flex bg-[#0D0D0D] p-1 rounded border border-[#2A2A28] mb-4 text-[10px] font-mono font-semibold">
-        <button
-          onClick={() => setActiveTab('bfs')}
-          className={`flex-1 py-1.5 px-2 rounded-sm text-center uppercase tracking-wider transition-all ${
-            activeTab === 'bfs'
-              ? 'bg-[#1A1A18] text-[#D4AF37] border border-[#2A2A28]'
-              : 'text-[#666] hover:text-[#F2F2F0]'
-          }`}
-          id="tab-bfs"
-        >
-          BFS
-        </button>
-        <button
-          onClick={() => setActiveTab('dfs')}
-          className={`flex-1 py-1.5 px-2 rounded-sm text-center uppercase tracking-wider transition-all ${
-            activeTab === 'dfs'
-              ? 'bg-[#1A1A18] text-[#D4AF37] border border-[#2A2A28]'
-              : 'text-[#666] hover:text-[#F2F2F0]'
-          }`}
-          id="tab-dfs"
-        >
-          DFS
-        </button>
-        <button
-          onClick={() => setActiveTab('dijkstra')}
-          className={`flex-1 py-1.5 px-2 rounded-sm text-center uppercase tracking-wider transition-all ${
-            activeTab === 'dijkstra'
-              ? 'bg-[#1A1A18] text-[#D4AF37] border border-[#2A2A28]'
-              : 'text-[#666] hover:text-[#F2F2F0]'
-          }`}
-          id="tab-dijkstra"
-        >
-          Dijkstra
-        </button>
+      <div className="flex flex-wrap bg-[#0D0D0D] p-1 rounded border border-[#2A2A28] mb-4 text-[10px] font-mono font-semibold gap-0.5">
+        {(['bfs', 'dfs', 'dijkstra', 'astar', 'greedy'] as AlgorithmType[]).map((tab) => {
+          const labels: Record<AlgorithmType, string> = {
+            bfs: 'BFS', dfs: 'DFS', dijkstra: 'Dijkstra', astar: 'A*', greedy: 'Greedy'
+          };
+          const activeColors: Record<AlgorithmType, string> = {
+            bfs: 'text-slate-200 border-slate-500',
+            dfs: 'text-[#888] border-[#666]',
+            dijkstra: 'text-[#D4AF37] border-[#D4AF37]',
+            astar: 'text-emerald-400 border-emerald-600',
+            greedy: 'text-amber-400 border-amber-600',
+          };
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-1.5 px-1 rounded-sm text-center uppercase tracking-wider transition-all min-w-[50px] ${
+                activeTab === tab
+                  ? `bg-[#1A1A18] ${activeColors[tab]} border`
+                  : 'text-[#555] hover:text-[#F2F2F0]'
+              }`}
+              id={`tab-${tab}`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab description */}

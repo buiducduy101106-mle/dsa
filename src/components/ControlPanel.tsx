@@ -30,6 +30,10 @@ interface ControlPanelProps {
   onGenerateSwampTerrain: () => void;
   wallDensity: number;
   onChangeWallDensity: (density: number) => void;
+  allowDiagonal: boolean;
+  onChangeAllowDiagonal: (allow: boolean) => void;
+  heuristicType: 'manhattan' | 'euclidean' | 'octile';
+  onChangeHeuristicType: (type: 'manhattan' | 'euclidean' | 'octile') => void;
 }
 
 export default function ControlPanel({
@@ -48,6 +52,10 @@ export default function ControlPanel({
   onGenerateSwampTerrain,
   wallDensity,
   onChangeWallDensity,
+  allowDiagonal,
+  onChangeAllowDiagonal,
+  heuristicType,
+  onChangeHeuristicType,
 }: ControlPanelProps) {
   return (
     <div className="bg-[#141412] rounded-xl p-6 border border-[#2A2A28] space-y-6" id="control-panel">
@@ -118,9 +126,11 @@ export default function ControlPanel({
             className="w-full bg-[#1A1A18] border border-[#D4AF37] rounded p-2.5 text-xs text-[#F2F2F0] font-sans font-medium outline-none focus:ring-1 focus:ring-[#D4AF37] transition-colors disabled:opacity-50"
             id="algo-select"
           >
-            <option value="bfs">Breadth-First Search (Duyệt theo chiều rộng)</option>
-            <option value="dfs">Depth-First Search (Duyệt theo chiều sâu)</option>
-            <option value="dijkstra">Dijkstra (Tìm đường có Hệ số Trọng số)</option>
+            <option value="bfs">BFS — Breadth-First Search (Chiều Rộng)</option>
+            <option value="dfs">DFS — Depth-First Search (Chiều Sâu)</option>
+            <option value="dijkstra">Dijkstra — Tìm đường Trọng số</option>
+            <option value="astar">A* Search — Heuristic Tối ưu ★</option>
+            <option value="greedy">Greedy Best-First — Tham Lam Nhanh</option>
           </select>
         </div>
 
@@ -147,6 +157,52 @@ export default function ControlPanel({
             ))}
           </div>
         </div>
+      </div>
+
+      {/* 2b. Diagonal & Heuristic Settings */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#2A2A28]/50">
+        {/* Toggle Di chuyển Chéo */}
+        <div className="flex items-center justify-between bg-[#1A1A18] border border-[#2A2A28] rounded p-3">
+          <div>
+            <span className="text-[11px] font-bold text-white uppercase tracking-wide block">Đi chéo (8 hướng)</span>
+            <span className="text-[9px] text-[#555] font-mono">Hệ số chéo = √2 ≈ 1.41</span>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowDiagonal}
+              onChange={(e) => onChangeAllowDiagonal(e.target.checked)}
+              disabled={isRunning}
+              className="sr-only peer"
+              id="diagonal-toggle"
+            />
+            <div className="w-9 h-5 bg-[#2A2A28] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-[#888] after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#D4AF37]/30 peer-checked:after:bg-[#D4AF37]"></div>
+          </label>
+        </div>
+
+        {/* Heuristic Selector — chỉ hiện khi chọn A* hoặc Greedy */}
+        {(selectedAlgo === 'astar' || selectedAlgo === 'greedy') ? (
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-widest text-[#666] font-mono block">
+              Hàm Heuristic h(n)
+            </label>
+            <select
+              value={heuristicType}
+              onChange={(e) => onChangeHeuristicType(e.target.value as 'manhattan' | 'euclidean' | 'octile')}
+              disabled={isRunning}
+              className="w-full bg-[#1A1A18] border border-[#2A2A28] rounded p-2.5 text-[11px] text-[#A0A09B] outline-none focus:border-[#D4AF37] transition-colors disabled:opacity-50"
+              id="heuristic-select"
+            >
+              <option value="manhattan">Manhattan — Lưới 4 hướng</option>
+              <option value="euclidean">Euclidean — Đường chim bay</option>
+              <option value="octile">Octile — Lưới 8 hướng (chéo)</option>
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center bg-[#0D0D0D] border border-dashed border-[#2A2A28] rounded p-3">
+            <span className="text-[10px] text-[#444] font-mono text-center">Heuristic chỉ dùng<br/>cho A* và Greedy</span>
+          </div>
+        )}
       </div>
 
       {/* 3. Drawing Brushes / Tools */}

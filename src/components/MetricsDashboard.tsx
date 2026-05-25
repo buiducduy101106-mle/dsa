@@ -37,6 +37,8 @@ export default function MetricsDashboard({
       case 'bfs': return 'from-[#888] to-[#CDAF37]';
       case 'dfs': return 'from-[#555] to-slate-400';
       case 'dijkstra': return 'from-[#D4AF37] to-[#E5C35D]';
+      case 'astar': return 'from-emerald-700 to-emerald-400';
+      case 'greedy': return 'from-amber-700 to-amber-400';
     }
   };
 
@@ -45,6 +47,8 @@ export default function MetricsDashboard({
       case 'bfs': return 'text-slate-300';
       case 'dfs': return 'text-[#888]';
       case 'dijkstra': return 'text-[#D4AF37]';
+      case 'astar': return 'text-emerald-400';
+      case 'greedy': return 'text-amber-400';
     }
   };
 
