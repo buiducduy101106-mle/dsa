@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report: Adversarial Pathfinding & Algorithm Failures</title>
+
+  <!-- Tailwind CSS & Google Fonts & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['Fira Code', 'monospace'],
+          },
+          colors: {
+            brand: {
+              gold: '#D4AF37',
+              goldLight: '#FFE27D',
+              darkBg: '#09090B',
+              panelBg: '#141412',
+              border: '#2A2A28',
+              accentBlue: '#3b82f6',
+              accentGreen: '#10b981',
+              accentRed: '#ef4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Slide Animation & Viewport Setup */
+    .slide-slide {
+      display: none;
+      transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+      opacity: 0;
+      transform: scale(0.97) translateY(10px);
+    }
+
+    .slide-slide.active {
+      display: flex;
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+
+    /* Code Editor Glassmorphism */
+    .code-glow {
+      box-shadow: inset 0 0 20px rgba(212, 175, 55, 0.03), 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    /* Simulation node colors */
+    .sim-node {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid #1a1a1a;
+    }
+
+    .sim-node-start {
+      background-color: #D4AF37 !important;
+      border-color: #FFE27D !important;
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.9);
+      transform: scale(1.05);
+      z-index: 10;
+    }
+
+    .sim-node-end {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+      transform: scale(1.05);
+      z-index: 10;
+    }
+
+    .sim-node-wall {
+      background-color: #3f3f46 !important;
+      /* Zinc 700 */
+      border-color: #52525b !important;
+      /* Zinc 600 */
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
+    }
+
+    .sim-node-visited-left {
+      background-color: rgba(59, 130, 246, 0.65) !important;
+      /* Brighter Blue */
+      border-color: rgba(147, 197, 253, 0.85) !important;
+      box-shadow: 0 0 4px rgba(59, 130, 246, 0.4);
+    }
+
+    .sim-node-visited-right {
+      background-color: rgba(168, 85, 247, 0.65) !important;
+      /* Brighter Purple */
+      border-color: rgba(216, 180, 254, 0.85) !important;
+      box-shadow: 0 0 4px rgba(168, 85, 247, 0.4);
+    }
+
+    .sim-node-path {
+      background-color: #f59e0b !important;
+      /* Amber 500 */
+      border-color: #fbbf24 !important;
+      /* Amber 400 */
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.85);
+      transform: scale(1.1);
+      z-index: 5;
+      animation: pulsePath 1s infinite alternate;
+    }
+
+    @keyframes pulsePath {
+      0% {
+        transform: scale(1.05);
+        box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+      }
+
+      100% {
+        transform: scale(1.15);
+        box-shadow: 0 0 14px rgba(245, 158, 11, 0.95);
+      }
+    }
+
+    .sim-node-swamp {
+      background-color: #78350f !important;
+      /* Amber 900 (Muddy Brown) */
+      border-color: #92400e !important;
+      /* Amber 800 */
+    }
+
+    .sim-node-water {
+      background-color: #1e3a8a !important;
+      /* Blue 900 (Water) */
+      border-color: #3b82f6 !important;
+      /* Blue 500 */
+    }
+
+    /* Scrollbar for raw output */
+    pre::-webkit-scrollbar {
+      height: 4px;
+      width: 4px;
+    }
+
+    pre::-webkit-scrollbar-thumb {
+      background: #2A2A28;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+
+<body class="bg-[#09090B] text-slate-200 overflow-hidden font-sans select-none">
+
+  <!-- TOP DECORATIVE HEADER -->
+  <div
+    class="absolute top-0 left-0 w-full bg-[#141412]/90 backdrop-blur-md border-b border-[#2A2A28] px-8 py-3 flex justify-between items-center z-50">
+    <div class="flex items-center gap-3">
+      <span
+        class="text-xs bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 px-2 py-0.5 rounded font-mono font-semibold">[GROUP_5]</span>
+      <h2 class="text-sm font-semibold tracking-wide text-slate-300">National Economics University • Major DSEB</h2>
+    </div>
+    <div class="flex items-center gap-6 text-xs font-mono text-[#888]">
+      <span class="hidden md:inline">PATHFINDING STRESS-TEST DECK v2.5</span>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse"></span>
+        <span class="text-[10px] text-slate-400">Live Simulator Active</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDES MAIN CONTAINER -->
+  <div class="w-screen h-screen flex justify-center items-center pt-14 pb-16 px-6 md:px-12 relative">
+
+    <!-- Decorative Glowing Ambient Blobs -->
+    <div
+      class="absolute -top-[10%] -right-[10%] w-[500px] h-[500px] bg-[#D4AF37]/5 rounded-full blur-[120px] pointer-events-none">
+    </div>
+    <div
+      class="absolute -bottom-[10%] -left-[10%] w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[100px] pointer-events-none">
+    </div>
+
+    <!-- ==================== SLIDE 1: COVER SLIDE ==================== -->
+    <div
+      class="slide-slide active w-full max-w-6xl h-full flex-col justify-center items-center text-center relative z-10">
+      <p class="text-xs font-mono tracking-[0.3em] text-[#D4AF37] uppercase mb-4">Algorithm Pathfinding Project Report
+      </p>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white leading-tight">
+        VISUALIZATION & CASE ERROR TESTING <br>
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#FFE27D] to-white">
+          ON COMPLEX TERRAINS
+        </span>
+      </h1>
+      <p class="text-sm text-slate-400 max-w-2xl mx-auto mt-6 leading-relaxed">
+        Analysis of static graph behavior, multi-weight dynamics, realistic corner-crossing controls, and
+        deep technical dissection of 3 classic failure cases in BFS, DFS & Dijkstra.
+      </p>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 w-full max-w-4xl text-left font-mono">
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28]">
+          <span class="text-[10px] text-[#666] block">GRID SPACE</span>
+          <span class="text-sm text-slate-200 font-bold block mt-1">20 × 45 (900 Nodes)</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28]">
+          <span class="text-[10px] text-[#666] block">WEIGHT TERRAIN COSTS</span>
+          <span class="text-sm text-[#D4AF37] font-bold block mt-1">Swamp (5) | Water (10)</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28]">
+          <span class="text-[10px] text-[#666] block">HEURISTIC METRICS</span>
+          <span class="text-sm text-slate-200 font-bold block mt-1">4 Distance Systems</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28]">
+          <span class="text-[10px] text-[#666] block">PARALLEL SIMULATION</span>
+          <span class="text-sm text-emerald-400 font-bold block mt-1">Live Adversarial Lab</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 2: ARCHITECTURE & DECOUPLED STATE ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-sitemap text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">System Architecture & Data Flow</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+        <div class="md:col-span-7 flex flex-col justify-between">
+          <p class="text-sm text-slate-400 leading-relaxed mb-4">
+            The system is built using a clean **Decoupled Model** separating the pathfinding core (`algorithms.ts`) from
+            the React 19 rendering layer, ensuring smooth performance even during 50-iteration background benchmarks.
+          </p>
+          <div class="space-y-4">
+            <div class="flex items-start gap-3 bg-[#141412] p-3 rounded-lg border border-[#2A2A28]">
+              <div
+                class="w-8 h-8 rounded bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0 font-mono text-xs">
+                M</div>
+              <div>
+                <strong class="text-xs text-slate-200 uppercase font-mono block">Algorithmic Pathfinding Core
+                  (`algorithms.ts`)</strong>
+                <span class="text-[11px] text-slate-400">Processes raw grids dynamically and outputs sequential arrays
+                  of visited nodes to maximize CPU speeds and cache hits.</span>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-[#141412] p-3 rounded-lg border border-[#2A2A28]">
+              <div
+                class="w-8 h-8 rounded bg-[#D4AF37]/10 flex items-center justify-center text-[#D4AF37] shrink-0 font-mono text-xs">
+                V</div>
+              <div>
+                <strong class="text-xs text-slate-200 uppercase font-mono block">Real-time Grid Rendering
+                  (`GridRenderer.tsx`)</strong>
+                <span class="text-[11px] text-slate-400">Renders 900 responsive nodes in real-time using CSS hardware
+                  acceleration, supporting freehand multi-target drawing via mouse actions.</span>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-[#141412] p-3 rounded-lg border border-[#2A2A28]">
+              <div
+                class="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0 font-mono text-xs">
+                C</div>
+              <div>
+                <strong class="text-xs text-slate-200 uppercase font-mono block">Independent Adversarial Laboratory
+                  (`ScenarioLab.tsx`)</strong>
+                <span class="text-[11px] text-slate-400">Runs a parallel virtual sandbox environment to execute and
+                  visualize two search algorithms simultaneously in real-time.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="md:col-span-5 bg-black rounded-xl border border-[#2A2A28] p-4 flex flex-col justify-between code-glow">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-2 mb-2 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-file-code text-[#D4AF37] mr-1"></i> types.ts</span>
+            <span>TypeScript</span>
+          </div>
+          <pre class="text-[10px] font-mono text-slate-300 leading-relaxed overflow-x-auto">
+<span class="text-blue-400">export interface</span> <span class="text-[#D4AF37]">GridNode</span> {
+  row: <span class="text-purple-400">number</span>;
+  col: <span class="text-purple-400">number</span>;
+  isStart: <span class="text-purple-400">boolean</span>;
+  isEnd: <span class="text-purple-400">boolean</span>;
+  isWall: <span class="text-purple-400">boolean</span>;
+  weight: <span class="text-purple-400">number</span>; <span class="text-slate-500">// 1, 5, or 10</span>
+  isVisited: <span class="text-purple-400">boolean</span>;
+  isPath: <span class="text-purple-400">boolean</span>;
+  distance: <span class="text-purple-400">number</span>;
+  previousNode: <span class="text-[#D4AF37]">GridNode</span> | <span class="text-blue-400">null</span>;
+}</pre>
+          <div class="text-[9px] text-[#666] border-t border-[#2A2A28] pt-2 mt-2 font-mono">
+            *Normalized Node structure eliminates memory overhead when handling cyclic graph references.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 3: MULTI-WEIGHTED TERRAIN GRID ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-map-marked-alt text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Creating Multi-weighted Terrain Grids</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div class="space-y-4">
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Unlike simple binary simulators (walls vs empty space), our application introduces **Dynamic Terrain
+            Weights** to represent realistic geography (like Google Maps) or complex physical environments in games.
+          </p>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] text-center">
+              <span
+                class="w-8 h-8 rounded bg-[#2A2A28] mx-auto mb-2 flex items-center justify-center border border-[#444]"></span>
+              <strong class="text-xs text-slate-200 block font-mono">STONE WALL</strong>
+              <span class="text-[10px] text-red-400 block font-bold">Impassable (Barrier)</span>
+            </div>
+            <div class="bg-[#141412] p-3 rounded border border-[#5C4533] text-center">
+              <span
+                class="w-8 h-8 rounded bg-[#3D2C1E] mx-auto mb-2 flex items-center justify-center font-bold text-[#D4AF37] text-xs">5</span>
+              <strong class="text-xs text-slate-200 block font-mono">SWAMP MUD</strong>
+              <span class="text-[10px] text-[#D4AF37] block font-bold">Weight = 5</span>
+            </div>
+            <div class="bg-[#141412] p-3 rounded border border-[#2B3554] text-center">
+              <span
+                class="w-8 h-8 rounded bg-[#1C2030] mx-auto mb-2 flex items-center justify-center font-bold text-cyan-400 text-xs"><i
+                  class="fa-solid fa-water"></i></span>
+              <strong class="text-xs text-slate-200 block font-mono">DEEP WATER</strong>
+              <span class="text-[10px] text-cyan-400 block font-bold">Weight = 10</span>
+            </div>
+          </div>
+          <div class="bg-[#0D0D0D] border border-[#2A2A28] p-3.5 rounded text-xs font-mono">
+            <div class="text-[#D4AF37] uppercase text-[10px] font-bold mb-1"><i class="fa-solid fa-gears"></i>
+              Procedural Terrain Generation</div>
+            Applies dynamic mathematical sine waves paired with random noise to procedurally generate organic, winding
+            rivers and swamp lanes (`maze.ts` -> `generateSwampTerrain`).
+          </div>
+        </div>
+        <div class="bg-black rounded-xl border border-[#2A2A28] p-5 code-glow">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-2 mb-3 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-file-code text-[#D4AF37] mr-1"></i> maze.ts</span>
+            <span>TypeScript</span>
+          </div>
+          <pre class="text-[10.5px] font-mono text-slate-300 leading-relaxed overflow-x-auto">
+<span class="text-blue-400">const</span> sineWave = Math.sin(col * <span class="text-purple-400">0.3</span>) * <span class="text-purple-400">4</span> + <span class="text-purple-400">10</span>;
+<span class="text-blue-400">const</span> distanceToWave = Math.abs(row - sineWave);
+ 
+<span class="text-blue-400">if</span> (distanceToWave &lt; <span class="text-purple-400">2.2</span>) {
+  weight = <span class="text-purple-400">10</span>; <span class="text-slate-500">// Deep water (extreme resistance)</span>
+} <span class="text-blue-400">else if</span> (distanceToWave &lt; <span class="text-purple-400">4.5</span>) {
+  weight = <span class="text-purple-400">5</span>;  <span class="text-slate-500">// Swamp mud (moderate drag)</span>
+}</pre>
+          <div class="mt-4 p-3 bg-blue-950/20 rounded border border-blue-900/30 text-[10.5px] text-slate-400">
+            <strong>Principle:</strong> By calculating the Euclidean distance from coordinates to the sine wave
+            centerline, we generate fluid, natural water bodies procedurally.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 4: HEURISTIC MATH & DIAGONAL CROSSING ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-calculator text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Heuristic Estimates & Diagonal Movement</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+        <div class="md:col-span-5 space-y-4">
+          <p class="text-xs text-slate-400 leading-relaxed">
+            To enable standard 8-directional movement, we integrate four heuristic distances along with geometric
+            collision controls to prevent clipping through diagonal obstacle corners (**Corner-Crossing Control**).
+          </p>
+          <div class="space-y-2 text-xs font-mono">
+            <div class="bg-[#141412] p-2 rounded border border-[#2A2A28]">
+              <span class="text-[#D4AF37] block font-bold">1. Manhattan Distance</span>
+              <span class="text-slate-400 text-[10px]">Designed for 4-way orthogonal movement (up, down, left,
+                right).</span>
+            </div>
+            <div class="bg-[#141412] p-2 rounded border border-[#2A2A28]">
+              <span class="text-[#D4AF37] block font-bold">2. Octile Distance</span>
+              <span class="text-slate-400 text-[10px]">Perfect for 8-directional movement with diagonal scale of
+                sqrt(2).</span>
+            </div>
+            <div class="bg-[#141412] p-2 rounded border border-[#2A2A28]">
+              <span class="text-[#D4AF37] block font-bold">3. Chebyshev Distance</span>
+              <span class="text-slate-400 text-[10px]">Used when diagonal and orthogonal movements have uniform
+                cost.</span>
+            </div>
+          </div>
+        </div>
+        <div class="md:col-span-7 bg-black rounded-xl border border-[#2A2A28] p-5 code-glow">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-2 mb-3 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-file-code text-[#D4AF37] mr-1"></i> algorithms.ts (Obstacle Corner-Crossing
+              Logic)</span>
+            <span>TypeScript</span>
+          </div>
+          <pre class="text-[10px] font-mono text-slate-300 leading-relaxed overflow-x-auto">
+<span class="text-slate-500">// Check adjacent diagonal nodes in algorithms.ts</span>
+<span class="text-blue-400">if</span> (allowDiagonal) {
+  <span class="text-slate-500">// Case: Up - Left</span>
+  <span class="text-blue-400">if</span> (up &amp;&amp; left) {
+    <span class="text-blue-400">const</span> target = grid[row - <span class="text-purple-400">1</span>][col - <span class="text-purple-400">1</span>];
+    <span class="text-blue-400">const</span> blocked = dontCrossCorners
+      ? (upNode?.isWall || leftNode?.isWall)
+      : (upNode?.isWall &amp;&amp; leftNode?.isWall);
+    <span class="text-blue-400">if</span> (!blocked) neighbors.push(target);
+  }
+}</pre>
+          <div
+            class="mt-4 p-3 bg-amber-950/20 rounded border border-[#4A4232]/40 text-[10px] text-[#C1B58C] leading-relaxed">
+            💡 <strong>Technical Insight:</strong> The `dontCrossCorners` option blocks diagonal paths when either of
+            the adjacent orthogonal cells is a wall, fully resolving the common "wall clipping" visual glitch in game AI
+            programming.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 5: SCENARIO LAB INTRODUCTION ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center items-center text-center relative z-10">
+      <i class="fa-solid fa-vial-virus text-[#ef4444] text-5xl mb-6 animate-bounce"></i>
+      <h2 class="text-4xl font-extrabold text-white">The Adversarial Sandbox: Scenario Lab</h2>
+      <p class="text-sm text-slate-400 max-w-2xl mx-auto mt-4 leading-relaxed">
+        We have custom-engineered three extreme testing scenarios to expose the core theoretical flaws and
+        practical limitations of popular pathfinding algorithms.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 w-full max-w-4xl text-left">
+        <div
+          class="bg-[#141412] p-5 rounded-lg border-l-4 border-yellow-500 border-t border-r border-b border-[#2A2A28]">
+          <span class="text-[10px] font-mono text-[#D4AF37] block">SCENARIO 01</span>
+          <h4 class="text-sm font-bold text-white mt-1">Deep Water Barrier</h4>
+          <p class="text-[11px] text-slate-400 mt-2 font-mono">BFS vs DIJKSTRA</p>
+          <p class="text-[11px] text-[#888] mt-2">Challenges pathing steps vs. extremely high movement cost.</p>
+        </div>
+        <div
+          class="bg-[#141412] p-5 rounded-lg border-l-4 border-amber-500 border-t border-r border-b border-[#2A2A28]">
+          <span class="text-[10px] font-mono text-amber-500 block">SCENARIO 02</span>
+          <h4 class="text-sm font-bold text-white mt-1">Dead-End Maze Trap</h4>
+          <p class="text-[11px] text-slate-400 mt-2 font-mono">DFS vs BFS</p>
+          <p class="text-[11px] text-[#888] mt-2">Exposes the massive performance penalty and infinite routing of DFS.
+          </p>
+        </div>
+        <div class="bg-[#141412] p-5 rounded-lg border-l-4 border-red-500 border-t border-r border-b border-[#2A2A28]">
+          <span class="text-[10px] font-mono text-red-500 block">SCENARIO 03</span>
+          <h4 class="text-sm font-bold text-white mt-1">Cheap Weight Luring</h4>
+          <p class="text-[11px] text-slate-400 mt-2 font-mono">DIJKSTRA & BFS</p>
+          <p class="text-[11px] text-[#888] mt-2">Demonstrates Dijkstra's directional blindness when lured by cheap
+            weights.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 6: CASE 1 DETAILED ANALYSIS & SIMULATION ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center justify-between border-b border-[#2A2A28] pb-3 mb-3">
+        <div class="flex items-center gap-3">
+          <span
+            class="text-xs font-mono bg-yellow-500/10 text-yellow-500 px-2 py-0.5 rounded border border-yellow-500/20">FAILURE
+            01</span>
+          <h2 class="text-2xl font-bold text-white">Deep Water Barrier: BFS "Blindly" Plows Straight</h2>
+        </div>
+        <span class="text-xs text-slate-500 font-mono">Test Map #1</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+        <div class="md:col-span-5 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="bg-[#ef4444]/10 border-l-4 border-[#ef4444] p-2.5 rounded text-xs">
+              <strong class="text-white">Core Failure: BFS marches straight through high-cost hazards</strong>
+              <p class="text-[#fca5a5] text-[11px] mt-1">Since BFS considers graphs as unweighted (each hop is 1 unit),
+                it judges crossing the water as the shortest route, wasting a massive <strong class="text-white">101
+                  energy units</strong>!</p>
+            </div>
+            <div class="bg-emerald-500/10 border-l-4 border-emerald-500 p-2.5 rounded text-xs">
+              <strong class="text-white">Dijkstra intelligently bypasses the water lake</strong>
+              <p class="text-[#a7f3d0] text-[11px] mt-1">By respecting terrain costs, Dijkstra accepts a longer path in
+                steps but minimizes total cost to only <strong class="text-white">35 energy units</strong>.</p>
+            </div>
+          </div>
+
+          <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] mt-2">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-[#D4AF37]">LAB SIMULATION</span>
+              <button id="run-sim1-btn"
+                class="px-3 py-1 bg-[#D4AF37] hover:bg-[#FFE27D] text-black font-mono font-bold text-[10px] rounded flex items-center gap-1.5 transition-all">
+                <i class="fa-solid fa-play"></i> Run Simulation
+              </button>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span id="sim1-bfs-stats">BFS Visited: 0</span>
+              <span id="sim1-dijkstra-stats">Dijkstra Visited: 0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Grid Simulator dissection -->
+        <div class="md:col-span-7 bg-[#0d0d0d] rounded-xl border border-[#2A2A28] p-4 flex flex-col justify-between">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-1.5 mb-2 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-circle-nodes text-[#D4AF37] mr-1"></i> Wavefront Comparison: BFS (Left) vs
+              Dijkstra (Right)</span>
+            <span>Size: 10 x 20</span>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Left Grid (BFS) -->
+            <div>
+              <span class="text-[10px] font-mono text-blue-400 block text-center mb-1">BFS (Unweighted Hops Mode)</span>
+              <div id="sim1-grid-left" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+            <!-- Right Grid (Dijkstra) -->
+            <div>
+              <span class="text-[10px] font-mono text-purple-400 block text-center mb-1">Dijkstra (Cost-Optimal
+                Mode)</span>
+              <div id="sim1-grid-right" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+          </div>
+          <div class="text-[9px] text-[#666] mt-2 font-mono text-center">
+            *The dark blue strip in the center is a deep water barrier (Cost = 10).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 7: CASE 2 DETAILED ANALYSIS & SIMULATION ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center justify-between border-b border-[#2A2A28] pb-3 mb-3">
+        <div class="flex items-center gap-3">
+          <span
+            class="text-xs font-mono bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded border border-amber-500/20">FAILURE
+            02</span>
+          <h2 class="text-2xl font-bold text-white">Dead-End Corridor Trap: DFS "Blindly" Digs Deep</h2>
+        </div>
+        <span class="text-xs text-slate-500 font-mono">Test Map #2</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+        <div class="md:col-span-5 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="bg-[#ef4444]/10 border-l-4 border-[#ef4444] p-2.5 rounded text-xs">
+              <strong class="text-white">DFS plows deep into the long dead-end hallway</strong>
+              <p class="text-[#fca5a5] text-[11px] mt-1">Even though the target is just 3 cells below the starting
+                position, DFS prioritizes deep branching, pulling the search deep into a dead-end corridor before
+                backtracking. It visits over <strong class="text-white">280 redundant cells</strong>!</p>
+            </div>
+            <div class="bg-emerald-500/10 border-l-4 border-emerald-500 p-2.5 rounded text-xs">
+              <strong class="text-white">BFS locates target in just 3 steps</strong>
+              <p class="text-[#a7f3d0] text-[11px] mt-1">By expanding radially from the source, BFS quickly scans local
+                cells and finds the adjacent target almost instantly.</p>
+            </div>
+          </div>
+
+          <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] mt-2">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-[#D4AF37]">LAB SIMULATION</span>
+              <button id="run-sim2-btn"
+                class="px-3 py-1 bg-[#D4AF37] hover:bg-[#FFE27D] text-black font-mono font-bold text-[10px] rounded flex items-center gap-1.5 transition-all">
+                <i class="fa-solid fa-play"></i> Run Simulation
+              </button>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span id="sim2-dfs-stats">DFS Visited: 0</span>
+              <span id="sim2-bfs-stats">BFS Visited: 0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Grid Simulator dissection -->
+        <div class="md:col-span-7 bg-[#0d0d0d] rounded-xl border border-[#2A2A28] p-4 flex flex-col justify-between">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-1.5 mb-2 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-compass text-[#D4AF37] mr-1"></i> Side-by-Side Analysis: DFS (Left) vs BFS
+              (Right)</span>
+            <span>Size: 10 x 20</span>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Left Grid (DFS) -->
+            <div>
+              <span class="text-[10px] font-mono text-amber-500 block text-center mb-1">DFS (Deep Rabbit-Hole
+                Hunt)</span>
+              <div id="sim2-grid-left" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+            <!-- Right Grid (BFS) -->
+            <div>
+              <span class="text-[10px] font-mono text-blue-400 block text-center mb-1">BFS (Uniform Radial
+                Ring-Search)</span>
+              <div id="sim2-grid-right" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+          </div>
+          <div class="text-[9px] text-[#666] mt-2 font-mono text-center">
+            *The grey lines represent solid walls creating a dead-end corridor that pulls DFS off course.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 8: CASE 3 DETAILED ANALYSIS & SIMULATION ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center justify-between border-b border-[#2A2A28] pb-3 mb-3">
+        <div class="flex items-center gap-3">
+          <span
+            class="text-xs font-mono bg-red-500/10 text-red-500 px-2 py-0.5 rounded border border-red-500/20">FAILURE
+            03</span>
+          <h2 class="text-2xl font-bold text-white">Cheap Weight Luring: Dijkstra "Seduced" by Low Weights</h2>
+        </div>
+        <span class="text-xs text-slate-500 font-mono">Test Map #3</span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+        <div class="md:col-span-5 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="bg-[#ef4444]/10 border-l-4 border-[#ef4444] p-2.5 rounded text-xs">
+              <strong class="text-white">Dijkstra lured into the massive open meadow to the left</strong>
+              <p class="text-[#fca5a5] text-[11px] mt-1">To reach the target on the right, the path must cross a swamp
+                lane (Cost = 10). Because Dijkstra is directionally blind and only prioritizes the cheapest local cost,
+                it runs backwards to explore the entire cheap open space to the left first before finally crossing the
+                swamp!</p>
+            </div>
+            <div class="bg-emerald-500/10 border-l-4 border-emerald-500 p-2.5 rounded text-xs">
+              <strong class="text-white">BFS ignores weights and reaches the target instantly</strong>
+              <p class="text-[#a7f3d0] text-[11px] mt-1">Since BFS is completely blind to terrain costs, it plows
+                directly through the swamp mud belt, finding the target with a minimal number of steps and visits.</p>
+            </div>
+          </div>
+
+          <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] mt-2">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-xs font-bold text-[#D4AF37]">LAB SIMULATION</span>
+              <button id="run-sim3-btn"
+                class="px-3 py-1 bg-[#D4AF37] hover:bg-[#FFE27D] text-black font-mono font-bold text-[10px] rounded flex items-center gap-1.5 transition-all">
+                <i class="fa-solid fa-play"></i> Run Simulation
+              </button>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span id="sim3-bfs-stats">BFS Visited: 0</span>
+              <span id="sim3-dijkstra-stats">Dijkstra Visited: 0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Grid Simulator dissection -->
+        <div class="md:col-span-7 bg-[#0d0d0d] rounded-xl border border-[#2A2A28] p-4 flex flex-col justify-between">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-1.5 mb-2 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-calculator text-[#D4AF37] mr-1"></i> Seduction Visualization: BFS (Left) vs
+              Dijkstra (Right)</span>
+            <span>Size: 10 x 20</span>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Left Grid (BFS) -->
+            <div>
+              <span class="text-[10px] font-mono text-blue-400 block text-center mb-1">BFS (Ignores weight, goes
+                straight)</span>
+              <div id="sim3-grid-left" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+            <!-- Right Grid (Dijkstra) -->
+            <div>
+              <span class="text-[10px] font-mono text-purple-400 block text-center mb-1">Dijkstra (Lured by cheap
+                weights)</span>
+              <div id="sim3-grid-right" class="grid gap-[1px] bg-[#1a1a1a] p-1 rounded border border-[#2a2a28]"
+                style="grid-template-columns: repeat(20, minmax(0, 1fr));"></div>
+            </div>
+          </div>
+          <div class="text-[9px] text-[#666] mt-2 font-mono text-center">
+            *The deep blue-brown strip on the right is a swamp mud belt blocking the goal (Cost = 10).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 9: CODE SHOWCASE SCENARIO LAB DUAL ENGINE ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-4">
+        <i class="fa-solid fa-flask text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Implementing the Parallel Adversarial Laboratory</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+        <div class="md:col-span-5 flex flex-col justify-between">
+          <p class="text-xs text-slate-400 leading-relaxed mb-4">
+            We successfully engineered a parallel simulation engine inside `ScenarioLab.tsx`. Utilizing a synchronized
+            `setInterval` heartbeat matching the visual speed, the sandbox handles step-by-step state changes on two
+            fully independent grid clones.
+          </p>
+          <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28] space-y-2">
+            <span class="text-[#D4AF37] font-mono text-[11px] block font-bold uppercase">Core advantages of our
+              laboratory architecture:</span>
+            <ul class="text-[10.5px] space-y-1.5 text-slate-300 list-inside list-disc">
+              <li>Deep-cloned matrices maintain zero side effects on the primary playground data.</li>
+              <li>Automatically aggregates terrain cost step weights matching custom playback speeds (1x to 10x).</li>
+              <li>Visually differentiates expanding fronts (BFS Wavefront in blue, Dijkstra in dark purple) using
+                hardware-accelerated CSS filters.</li>
+            </ul>
+          </div>
+        </div>
+        <div
+          class="md:col-span-7 bg-black rounded-xl border border-[#2A2A28] p-4 flex flex-col justify-between code-glow">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-2 mb-2 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-file-code text-[#D4AF37] mr-1"></i> ScenarioLab.tsx (Dynamic Synchronization
+              Heartbeat)</span>
+            <span>TypeScript</span>
+          </div>
+          <pre class="text-[9.5px] font-mono text-[#10b981] leading-relaxed overflow-x-auto">
+<span class="text-slate-500">// Update parallel simulation grid matrices step-by-step</span>
+timerRef.current = setInterval(() => {
+  step += stepIncr;
+  setComparisonStep(step);
+ 
+  <span class="text-slate-500">// Sync Left matrix state</span>
+  const nextLeftGrid = newGrid.map(row => row.map(node => ({ ...node })));
+  const leftVisitedCount = Math.min(step, visitedLeft.length);
+  for (let i = 0; i &lt; leftVisitedCount; i++) {
+    nextLeftGrid[visitedLeft[i].row][visitedLeft[i].col].isVisited = true;
+  }
+  setLeftGrid(nextLeftGrid);
+ 
+  <span class="text-slate-500">// Sync Right matrix state</span>
+  ...
+}, intervalMs);</pre>
+          <div class="text-[9px] text-[#666] border-t border-[#2A2A28] pt-2 mt-4 font-mono">
+            *Deep cloning grid arrays prevents multi-threaded memory pollution.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 10: BENCHMARKING METHODOLOGY ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-chart-line text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Quantitative Empirical Performance Benchmarking</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div class="space-y-4">
+          <p class="text-sm text-slate-400 leading-relaxed">
+            To ensure maximum scientific rigor, when the user clicks **"Run All"**, the engine does not just run the
+            searches once (which is highly vulnerable to CPU background noise and OS context switches).
+          </p>
+          <div
+            class="bg-[#141412] p-4 rounded-lg border-l-4 border-[#D4AF37] border-t border-r border-b border-[#2A2A28]">
+            <h4 class="text-xs font-mono font-bold text-white uppercase">High-Precision Noise-Reduction Mechanism</h4>
+            <p class="text-[11px] text-slate-400 mt-2">
+              We execute every search algorithm <strong>50 times consecutively</strong> in background threads (silent
+              iterations), computing the mean execution time to secure clean, realistic CPU readings.
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+            <div class="bg-black border border-[#2A2A28] p-3 rounded">
+              <span class="text-[#666] block">🏆 FASTEST</span>
+              <span class="text-slate-200 font-bold block mt-1">Greedy Search</span>
+              <span class="text-[10px] text-slate-500">&lt; 0.5 ms</span>
+            </div>
+            <div class="bg-black border border-[#2A2A28] p-3 rounded">
+              <span class="text-[#666] block">🏆 OPTIMAL COST</span>
+              <span class="text-slate-200 font-bold block mt-1">A* & Dijkstra</span>
+              <span class="text-[10px] text-slate-500">Absolute Minimal Cost</span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-black rounded-xl border border-[#2A2A28] p-5 code-glow">
+          <div
+            class="flex justify-between items-center border-b border-[#2A2A28] pb-2 mb-3 text-[10px] font-mono text-[#888]">
+            <span><i class="fa-solid fa-file-invoice text-[#D4AF37] mr-1"></i> Actual Real-Time Benchmark Performance
+              Grid</span>
+            <span>Visual Stats</span>
+          </div>
+          <table class="w-full text-left text-[11px] font-mono">
+            <thead>
+              <tr class="text-[#666] border-b border-[#2A2A28]">
+                <th class="pb-2 font-semibold">Algorithm</th>
+                <th class="pb-2 font-semibold">Time (ms)</th>
+                <th class="pb-2 font-semibold">Cells Visited</th>
+                <th class="pb-2 font-semibold">Cost Optimality</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#2A2A28] text-slate-300">
+              <tr>
+                <td class="py-2 text-[#D4AF37] font-semibold">A* Search</td>
+                <td class="py-2">2.1 ms</td>
+                <td class="py-2">84 cells</td>
+                <td class="py-2 text-emerald-400 font-bold">YES (Optimal)</td>
+              </tr>
+              <tr>
+                <td class="py-2 text-blue-400">BFS</td>
+                <td class="py-2">4.2 ms</td>
+                <td class="py-2">210 cells</td>
+                <td class="py-2 text-slate-500">FLAT-ONLY</td>
+              </tr>
+              <tr>
+                <td class="py-2 text-yellow-500">Dijkstra</td>
+                <td class="py-2">6.4 ms</td>
+                <td class="py-2">482 cells</td>
+                <td class="py-2 text-emerald-400 font-bold">YES (Optimal)</td>
+              </tr>
+              <tr>
+                <td class="py-2 text-amber-500">Greedy BFS</td>
+                <td class="py-2">0.8 ms</td>
+                <td class="py-2">42 cells</td>
+                <td class="py-2 text-slate-500">NON-OPTIMAL</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 11: PRACTICAL APPLICATIONS IN GAMES ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-gamepad text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Practical Applications in Game Development</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div class="space-y-4">
+          <p class="text-sm text-slate-400 leading-relaxed">
+            The insights gathered from these adversarial scenarios are vital when designing robust AI pathing engines
+            for open-world exploration games and Real-Time Strategy (RTS) games.
+          </p>
+          <div class="space-y-3">
+            <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] flex items-center gap-3">
+              <i class="fa-solid fa-shield text-[#D4AF37] text-xl"></i>
+              <div>
+                <strong class="text-xs text-slate-200 block">Cliff-clipping & wall-collision avoidance</strong>
+                <span class="text-[10.5px] text-slate-400">Combining 8-directional paths with dontCrossCorners prevents
+                  entities from glitching diagonally through solid wall cells.</span>
+              </div>
+            </div>
+            <div class="bg-[#141412] p-3 rounded border border-[#2A2A28] flex items-center gap-3">
+              <i class="fa-solid fa-ghost text-[#D4AF37] text-xl"></i>
+              <div>
+                <strong class="text-xs text-slate-200 block">Custom heuristic selection for physics accuracy</strong>
+                <span class="text-[10.5px] text-slate-400">Applies Octile heuristic for standard 8-way mobile agents,
+                  and Manhattan heuristic for classic 4-way orthogonal RTS grids.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="image-wrapper shadow-2xl relative w-full h-[320px]">
+          <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10"></div>
+          <div class="absolute bottom-4 left-4 z-20 font-mono text-xs text-[#D4AF37]">
+            <i class="fa-solid fa-gamepad mr-1"></i> [REALISTIC MOVEMENT PHYSICS SIMULATION]
+          </div>
+          <img class="w-full h-full object-cover opacity-80 rounded-xl" src="pathfinding_game_ai.png"
+            alt="Game development AI pathfinding grid navigation dark design">
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 12: KEY TECHNOLOGICAL BREAKTHROUGHS ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center items-center text-center relative z-10">
+      <i class="fa-solid fa-medal text-[#D4AF37] text-5xl mb-6"></i>
+      <h2 class="text-4xl font-extrabold text-white">Key Technological Breakthroughs</h2>
+      <p class="text-sm text-slate-400 max-w-2xl mx-auto mt-4 leading-relaxed">
+        Our project transcends simple static visualizers, offering a robust, fully type-safe, and high-performance
+        benchmarking suite.
+      </p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 w-full max-w-4xl text-left font-mono">
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28] text-center">
+          <i class="fa-solid fa-shield-halved text-2xl text-blue-500 mb-2"></i>
+          <span class="text-xs text-slate-200 font-bold block">TypeScript Safe</span>
+          <span class="text-[10px] text-[#666] mt-1 block">Eliminates algorithm runtime crashes completely</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28] text-center">
+          <i class="fa-solid fa-bolt text-2xl text-yellow-500 mb-2"></i>
+          <span class="text-xs text-slate-200 font-bold block">Vite HMR</span>
+          <span class="text-[10px] text-[#666] mt-1 block">Near-instant compilation & hot reload speed</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28] text-center">
+          <i class="fa-solid fa-arrows-spin text-2xl text-purple-500 mb-2"></i>
+          <span class="text-xs text-slate-200 font-bold block">Dynamic Weights</span>
+          <span class="text-[10px] text-[#666] mt-1 block">Simulates geographical friction and terrain drag</span>
+        </div>
+        <div class="bg-[#141412] p-4 rounded-lg border border-[#2A2A28] text-center">
+          <i class="fa-solid fa-code-compare text-2xl text-emerald-500 mb-2"></i>
+          <span class="text-xs text-slate-200 font-bold block">Realtime Lab</span>
+          <span class="text-[10px] text-[#666] mt-1 block">Renders two concurrent search loops synchronously</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 13: PRODUCT GROWTH & ROADMAP ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center relative z-10">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="fa-solid fa-road-barrier text-[#D4AF37] text-2xl"></i>
+        <h2 class="text-3xl font-bold text-white">Product Growth & Roadmap</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div class="space-y-4">
+          <p class="text-sm text-slate-400 leading-relaxed">
+            To elevate our research toward academic publication standards, we define three new technical growth pillars:
+          </p>
+          <div class="space-y-3 font-mono text-xs">
+            <div class="bg-[#141412] p-3 rounded border border-[#2A2A28]">
+              <span class="text-[#D4AF37] font-bold block">1. Hierarchical Pathfinding (HPA*)</span>
+              <p class="text-slate-400 text-[10px] mt-1">Implements two-level grid clustering to precompute abstract
+                macro-paths, enabling ultra-fast routing across massive grids exceeding 10,000 cells.</p>
+            </div>
+            <div class="bg-[#141412] p-3 rounded border border-[#2A2A28]">
+              <span class="text-[#D4AF37] font-bold block">2. Multi-agent Simultaneous Pathing</span>
+              <p class="text-slate-400 text-[10px] mt-1">Computes dynamic local collision avoidance between multiple
+                moving agents concurrently using social force fields or ORCA.</p>
+            </div>
+          </div>
+        </div>
+        <div
+          class="bg-black rounded-xl border border-[#2A2A28] p-5 flex flex-col justify-center items-center text-center h-full min-h-[300px]">
+          <i class="fa-solid fa-rocket text-5xl text-[#D4AF37] mb-4 animate-pulse"></i>
+          <h4 class="text-base font-bold text-white uppercase">Out-of-the-box 3D Engine Integration</h4>
+          <p class="text-[11px] text-[#888] max-w-xs mt-2 leading-relaxed">
+            Raw path arrays produced by `algorithms.ts` are designed to map directly into Vector3 coordinate spaces in
+            Three.js, WebGL, or Unity.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SLIDE 14: KẾT THÚC & Q&A ==================== -->
+    <div class="slide-slide w-full max-w-6xl h-full flex-col justify-center items-center text-center relative z-10">
+      <h1 class="text-6xl font-extrabold text-white">THANK YOU!</h1>
+      <p class="text-lg text-[#D4AF37] font-serif italic mt-3">We look forward to answering your questions</p>
+
+      <div class="w-24 h-1 bg-[#D4AF37] my-8 rounded-full"></div>
+
+      <div
+        class="flex flex-col gap-3 font-mono text-xs text-slate-400 bg-[#141412] p-6 rounded-lg border border-[#2A2A28] max-w-lg">
+        <div class="flex items-center gap-2 justify-center">
+          <i class="fa-brands fa-github text-[#D4AF37]"></i>
+          <span>Source Code:</span>
+          <a href="https://github.com/mhan0505/Pathfinding-Visualizer-for-Games_Maps"
+            class="text-blue-400 hover:underline" target="_blank">github.com/mhan0505/...</a>
+        </div>
+        <div class="flex items-center gap-2 justify-center">
+          <i class="fa-solid fa-globe text-[#D4AF37]"></i>
+          <span>Deployment:</span>
+          <a href="https://mhan0505.github.io/Pathfinding-Visualizer-for-Games_Maps/"
+            class="text-blue-400 hover:underline" target="_blank">mhan0505.github.io/...</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM PRESENTATION NAV CONTROLS -->
+  <div
+    class="absolute bottom-0 left-0 w-full bg-[#141412] border-t border-[#2A2A28] px-8 py-4 flex justify-between items-center z-50">
+    <div class="flex items-center gap-4 text-xs font-mono text-slate-400">
+      <button id="prev-slide-btn"
+        class="px-3.5 py-1.5 bg-[#1C1C1A] border border-[#2A2A28] rounded hover:text-white hover:bg-[#252523] active:scale-95 transition-all">
+        <i class="fa-solid fa-chevron-left mr-1"></i> PREV
+      </button>
+      <span>Slide <strong id="current-slide-num" class="text-[#D4AF37]">1</strong> / <span
+          id="total-slide-num">14</span></span>
+      <button id="next-slide-btn"
+        class="px-3.5 py-1.5 bg-[#D4AF37] text-black font-bold rounded hover:bg-[#FFE27D] active:scale-95 transition-all">
+        NEXT <i class="fa-solid fa-chevron-right ml-1"></i>
+      </button>
+    </div>
+
+    <!-- Slide Indicators -->
+    <div class="hidden md:flex items-center gap-1.5" id="slide-indicators-group">
+      <!-- Dots will be generated dynamically -->
+    </div>
+
+    <div class="text-[10px] font-mono text-[#555] hidden lg:block">
+      Press <strong>←</strong> or <strong>→</strong> on your keyboard to navigate slides
+    </div>
+  </div>
+
+  <!-- EMBEDDED HIGH-PERFORMANCE PATHFINDING SIMULATORS -->
+  <script>
+    // Global Error Logger for diagnostics in user's browser
+    window.addEventListener('error', function (e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.bottom = '80px';
+      errDiv.style.right = '20px';
+      errDiv.style.padding = '12px 20px';
+      errDiv.style.background = '#ef4444';
+      errDiv.style.color = '#fff';
+      errDiv.style.zIndex = '99999';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.fontSize = '11px';
+      errDiv.style.borderRadius = '6px';
+      errDiv.style.maxWidth = '400px';
+      errDiv.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+      errDiv.innerHTML = '<strong style="display:block;margin-bottom:4px;">⚠️ Javascript Error:</strong>' + e.message;
+      document.body.appendChild(errDiv);
+    });
+
+    // --- UTILITIES FOR PRESENTATION SLIDES NAVIGATION ---
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide-slide');
+    const totalSlides = slides.length;
+
+    const totalNumEl = document.getElementById('total-slide-num');
+    if (totalNumEl) {
+      totalNumEl.innerText = totalSlides;
+    }
+
+    const indicatorGroup = document.getElementById('slide-indicators-group');
+    if (indicatorGroup) {
+      for (let i = 0; i < totalSlides; i++) {
+        const dot = document.createElement('div');
+        dot.className = `w-2 h-2 rounded-full cursor-pointer transition-all duration-300 ${i === 0 ? 'bg-[#D4AF37] w-6' : 'bg-[#2A2A28]'}`;
+        dot.id = `dot-${i}`;
+        dot.addEventListener('click', () => jumpToSlide(i));
+        indicatorGroup.appendChild(dot);
+      }
+    }
+
+    function updateSlidePosition() {
+      slides.forEach((slide, index) => {
+        if (slide) {
+          if (index === currentSlide) {
+            slide.classList.add('active');
+          } else {
+            slide.classList.remove('active');
+          }
+        }
+      });
+
+      for (let i = 0; i < totalSlides; i++) {
+        const dot = document.getElementById(`dot-${i}`);
+        if (dot) {
+          if (i === currentSlide) {
+            dot.className = "w-2 h-2 rounded-full cursor-pointer transition-all duration-300 bg-[#D4AF37] w-6";
+          } else {
+            dot.className = "w-2 h-2 rounded-full cursor-pointer transition-all duration-300 bg-[#2A2A28]";
+          }
+        }
+      }
+
+      const currentNumEl = document.getElementById('current-slide-num');
+      if (currentNumEl) {
+        currentNumEl.innerText = currentSlide + 1;
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlidePosition();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlidePosition();
+      }
+    }
+
+    function jumpToSlide(index) {
+      if (index >= 0 && index < totalSlides) {
+        currentSlide = index;
+        updateSlidePosition();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      }
+    });
+
+    // --- GAME ENGINE: LIVE INTERACTIVE MINI-PATHFINDING SIMULATORS ---
+    const SIM_ROWS = 10;
+    const SIM_COLS = 20;
+
+    // Helper: Initialize HTML Grids representation
+    function initHtmlGrid(containerId, gridData) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      for (let r = 0; r < SIM_ROWS; r++) {
+        for (let c = 0; c < SIM_COLS; c++) {
+          const cell = document.createElement('div');
+          cell.id = `${containerId}-${r}-${c}`;
+          cell.className = 'aspect-square border border-[#1c1c1a] rounded-[1px] sim-node flex items-center justify-center';
+
+          const node = gridData[r][c];
+          if (node.isStart) {
+            cell.classList.add('sim-node-start');
+            cell.innerHTML = '<span class="text-[9px] font-extrabold text-black font-mono select-none">S</span>';
+          } else if (node.isEnd) {
+            cell.classList.add('sim-node-end');
+            cell.innerHTML = '<span class="text-[9px] font-extrabold text-black font-mono select-none">E</span>';
+          } else if (node.isWall) {
+            cell.classList.add('sim-node-wall');
+          } else if (node.weight === 5) {
+            cell.classList.add('sim-node-swamp');
+          } else if (node.weight === 10) {
+            cell.classList.add('sim-node-water');
+          } else {
+            cell.className += ' bg-[#09090b]';
+          }
+
+          container.appendChild(cell);
+        }
+      }
+    }
+
+    // Graph node logic helper
+    function getNeighbors(node, gridMap) {
+      const neighbors = [];
+      const { r, c } = node;
+      if (r > 0) neighbors.push(gridMap[r - 1][c]);
+      if (r < SIM_ROWS - 1) neighbors.push(gridMap[r + 1][c]);
+      if (c > 0) neighbors.push(gridMap[r][c - 1]);
+      if (c < SIM_COLS - 1) neighbors.push(gridMap[r][c + 1]);
+      return neighbors;
+    }
+
+    // ==========================================
+    // SIMULATION 1: Ao Sâu Cản Địa (BFS vs Dijkstra)
+    // ==========================================
+    let sim1LeftGrid, sim1RightGrid;
+    function setupSimulation1() {
+      const createGrid = () => {
+        const grid = [];
+        for (let r = 0; r < SIM_ROWS; r++) {
+          const row = [];
+          for (let c = 0; c < SIM_COLS; c++) {
+            let isWall = false;
+            let weight = 1;
+            // Build water lake in the center columns (8 to 11) except for detours
+            if (c >= 8 && c <= 11) {
+              if (r >= 2 && r <= 7) {
+                weight = 10;
+              }
+            }
+            row.push({
+              r, c,
+              isStart: r === 5 && c === 2,
+              isEnd: r === 5 && c === 17,
+              isWall, weight,
+              visited: false, path: false, previous: null, distance: Infinity
+            });
+          }
+          grid.push(row);
+        }
+        return grid;
+      };
+
+      sim1LeftGrid = createGrid();
+      sim1RightGrid = createGrid();
+      initHtmlGrid('sim1-grid-left', sim1LeftGrid);
+      initHtmlGrid('sim1-grid-right', sim1RightGrid);
+    }
+
+    let sim1LeftInterval, sim1RightInterval;
+    function runSimulation1() {
+      // Clean previous simulations
+      setupSimulation1();
+      clearInterval(sim1LeftInterval);
+      clearInterval(sim1RightInterval);
+
+      const startLeft = sim1LeftGrid[5][2];
+      const endLeft = sim1LeftGrid[5][17];
+      const startRight = sim1RightGrid[5][2];
+      const endRight = sim1RightGrid[5][17];
+
+      // Left BFS logic
+      const queue = [startLeft];
+      startLeft.visited = true;
+      const visitedLeftOrder = [];
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        visitedLeftOrder.push(curr);
+        if (curr === endLeft) break;
+        const neighbors = getNeighbors(curr, sim1LeftGrid);
+        for (let n of neighbors) {
+          if (!n.visited && !n.isWall) {
+            n.visited = true;
+            n.previous = curr;
+            queue.push(n);
+          }
+        }
+      }
+
+      // Right Dijkstra logic
+      const unvisited = [];
+      for (let r = 0; r < SIM_ROWS; r++) {
+        for (let c = 0; c < SIM_COLS; c++) {
+          const node = sim1RightGrid[r][c];
+          node.distance = node.isStart ? 0 : Infinity;
+          unvisited.push(node);
+        }
+      }
+      const visitedRightOrder = [];
+      while (unvisited.length > 0) {
+        unvisited.sort((a, b) => a.distance - b.distance);
+        const curr = unvisited.shift();
+        if (curr.distance === Infinity) break;
+        curr.visited = true;
+        visitedRightOrder.push(curr);
+        if (curr === endRight) break;
+        const neighbors = getNeighbors(curr, sim1RightGrid);
+        for (let n of neighbors) {
+          if (!n.visited) {
+            const tempDist = curr.distance + n.weight;
+            if (tempDist < n.distance) {
+              n.distance = tempDist;
+              n.previous = curr;
+            }
+          }
+        }
+      }
+
+      // Animate BFS (Left)
+      let l = 0;
+      sim1LeftInterval = setInterval(() => {
+        if (l < visitedLeftOrder.length) {
+          const node = visitedLeftOrder[l];
+          if (!node.isStart && !node.isEnd) {
+            const cell = document.getElementById(`sim1-grid-left-${node.r}-${node.c}`);
+            cell.classList.add('sim-node-visited-left');
+          }
+          document.getElementById('sim1-bfs-stats').innerText = `BFS Visited: ${l + 1} nodes`;
+          l++;
+        } else {
+          clearInterval(sim1LeftInterval);
+          // Draw shortest path
+          let p = endLeft.previous;
+          while (p && p !== startLeft) {
+            document.getElementById(`sim1-grid-left-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 65);
+
+      // Animate Dijkstra (Right)
+      let r = 0;
+      sim1RightInterval = setInterval(() => {
+        if (r < visitedRightOrder.length) {
+          const node = visitedRightOrder[r];
+          if (!node.isStart && !node.isEnd) {
+            const cell = document.getElementById(`sim1-grid-right-${node.r}-${node.c}`);
+            cell.classList.add('sim-node-visited-right');
+          }
+          document.getElementById('sim1-dijkstra-stats').innerText = `Dijkstra Visited: ${r + 1} nodes`;
+          r++;
+        } else {
+          clearInterval(sim1RightInterval);
+          // Draw shortest path
+          let p = endRight.previous;
+          while (p && p !== startRight) {
+            document.getElementById(`sim1-grid-right-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 65);
+    }
+
+    // ==========================================
+    // SIMULATION 2: Mê Cung Ngõ Cụt (DFS vs BFS)
+    // ==========================================
+    let sim2LeftGrid, sim2RightGrid;
+    function setupSimulation2() {
+      const createGrid = () => {
+        const grid = [];
+        for (let r = 0; r < SIM_ROWS; r++) {
+          const row = [];
+          for (let c = 0; c < SIM_COLS; c++) {
+            let isWall = false;
+            // Draw walls separating start (8, 10) and target (9, 10)
+            // with a long vertical dead end channel to the right
+            if (r === 7 && c >= 3 && c <= 17 && c !== 4) {
+              isWall = true;
+            }
+            if (c === 13 && r <= 6 && r >= 1) {
+              isWall = true;
+            }
+            if (c === 15 && r <= 6 && r >= 1) {
+              isWall = true;
+            }
+            if (r === 1 && c === 14) {
+              isWall = true; // Block top of channel (deep deadlock)
+            }
+            row.push({
+              r, c,
+              isStart: r === 8 && c === 14,
+              isEnd: r === 9 && c === 14,
+              isWall, weight: 1,
+              visited: false, path: false, previous: null
+            });
+          }
+          grid.push(row);
+        }
+        return grid;
+      };
+
+      sim2LeftGrid = createGrid();
+      sim2RightGrid = createGrid();
+      initHtmlGrid('sim2-grid-left', sim2LeftGrid);
+      initHtmlGrid('sim2-grid-right', sim2RightGrid);
+    }
+
+    let sim2LeftInterval, sim2RightInterval;
+    function runSimulation2() {
+      setupSimulation2();
+      clearInterval(sim2LeftInterval);
+      clearInterval(sim2RightInterval);
+
+      const startLeft = sim2LeftGrid[8][14];
+      const endLeft = sim2LeftGrid[9][14];
+      const startRight = sim2RightGrid[8][14];
+      const endRight = sim2RightGrid[9][14];
+
+      // Left DFS logic (Stack base)
+      const stack = [startLeft];
+      const visitedLeftOrder = [];
+      while (stack.length > 0) {
+        const curr = stack.pop();
+        if (curr.visited) continue;
+        curr.visited = true;
+        visitedLeftOrder.push(curr);
+        if (curr === endLeft) break;
+        // Check neighbors: standard DFS order (Up, Right, Down, Left)
+        const neighbors = getNeighbors(curr, sim2LeftGrid);
+        for (let n of neighbors) {
+          if (!n.visited && !n.isWall) {
+            n.previous = curr;
+            stack.push(n);
+          }
+        }
+      }
+
+      // Right BFS logic
+      const queue = [startRight];
+      startRight.visited = true;
+      const visitedRightOrder = [];
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        visitedRightOrder.push(curr);
+        if (curr === endRight) break;
+        const neighbors = getNeighbors(curr, sim2RightGrid);
+        for (let n of neighbors) {
+          if (!n.visited && !n.isWall) {
+            n.visited = true;
+            n.previous = curr;
+            queue.push(n);
+          }
+        }
+      }
+
+      // Animate DFS (Left)
+      let l = 0;
+      sim2LeftInterval = setInterval(() => {
+        if (l < visitedLeftOrder.length) {
+          const node = visitedLeftOrder[l];
+          if (!node.isStart && !node.isEnd) {
+            document.getElementById(`sim2-grid-left-${node.r}-${node.c}`).classList.add('sim-node-visited-right');
+          }
+          document.getElementById('sim2-dfs-stats').innerText = `DFS Visited: ${l + 1} nodes`;
+          l++;
+        } else {
+          clearInterval(sim2LeftInterval);
+          let p = endLeft.previous;
+          while (p && p !== startLeft) {
+            document.getElementById(`sim2-grid-left-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 60);
+
+      // Animate BFS (Right)
+      let r = 0;
+      sim2RightInterval = setInterval(() => {
+        if (r < visitedRightOrder.length) {
+          const node = visitedRightOrder[r];
+          if (!node.isStart && !node.isEnd) {
+            document.getElementById(`sim2-grid-right-${node.r}-${node.c}`).classList.add('sim-node-visited-left');
+          }
+          document.getElementById('sim2-bfs-stats').innerText = `BFS Visited: ${r + 1} nodes`;
+          r++;
+        } else {
+          clearInterval(sim2RightInterval);
+          let p = endRight.previous;
+          while (p && p !== startRight) {
+            document.getElementById(`sim2-grid-right-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 60);
+    }
+
+    // ==========================================
+    // SIMULATION 3: Mồi Nhử Trọng Số (BFS vs Dijkstra)
+    // ==========================================
+    let sim3LeftGrid, sim3RightGrid;
+    function setupSimulation3() {
+      const createGrid = () => {
+        const grid = [];
+        for (let r = 0; r < SIM_ROWS; r++) {
+          const row = [];
+          for (let c = 0; c < SIM_COLS; c++) {
+            let weight = 1;
+            // Thick swamp barrier at columns 12 to 14
+            if (c >= 12 && c <= 14) {
+              weight = 10;
+            }
+            row.push({
+              r, c,
+              isStart: r === 5 && c === 10,
+              isEnd: r === 5 && c === 16,
+              isWall: false, weight,
+              visited: false, path: false, previous: null, distance: Infinity
+            });
+          }
+          grid.push(row);
+        }
+        return grid;
+      };
+
+      sim3LeftGrid = createGrid();
+      sim3RightGrid = createGrid();
+      initHtmlGrid('sim3-grid-left', sim3LeftGrid);
+      initHtmlGrid('sim3-grid-right', sim3RightGrid);
+    }
+
+    let sim3LeftInterval, sim3RightInterval;
+    function runSimulation3() {
+      setupSimulation3();
+      clearInterval(sim3LeftInterval);
+      clearInterval(sim3RightInterval);
+
+      const startLeft = sim3LeftGrid[5][10];
+      const endLeft = sim3LeftGrid[5][16];
+      const startRight = sim3RightGrid[5][10];
+      const endRight = sim3RightGrid[5][16];
+
+      // Left BFS logic
+      const queue = [startLeft];
+      startLeft.visited = true;
+      const visitedLeftOrder = [];
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        visitedLeftOrder.push(curr);
+        if (curr === endLeft) break;
+        const neighbors = getNeighbors(curr, sim3LeftGrid);
+        for (let n of neighbors) {
+          if (!n.visited && !n.isWall) {
+            n.visited = true;
+            n.previous = curr;
+            queue.push(n);
+          }
+        }
+      }
+
+      // Right Dijkstra logic
+      const unvisitedRight = [];
+      for (let r = 0; r < SIM_ROWS; r++) {
+        for (let c = 0; c < SIM_COLS; c++) {
+          const node = sim3RightGrid[r][c];
+          node.distance = node.isStart ? 0 : Infinity;
+          unvisitedRight.push(node);
+        }
+      }
+      const visitedRightOrder = [];
+      while (unvisitedRight.length > 0) {
+        unvisitedRight.sort((a, b) => a.distance - b.distance);
+        const curr = unvisitedRight.shift();
+        if (curr.distance === Infinity) break;
+        curr.visited = true;
+        visitedRightOrder.push(curr);
+        if (curr === endRight) break;
+        const neighbors = getNeighbors(curr, sim3RightGrid);
+        for (let n of neighbors) {
+          if (!n.visited) {
+            const tempDist = curr.distance + n.weight;
+            if (tempDist < n.distance) {
+              n.distance = tempDist;
+              n.previous = curr;
+            }
+          }
+        }
+      }
+
+      // Animate BFS (Left)
+      let l = 0;
+      sim3LeftInterval = setInterval(() => {
+        if (l < visitedLeftOrder.length) {
+          const node = visitedLeftOrder[l];
+          if (!node.isStart && !node.isEnd) {
+            document.getElementById(`sim3-grid-left-${node.r}-${node.c}`).classList.add('sim-node-visited-left');
+          }
+          document.getElementById('sim3-bfs-stats').innerText = `BFS Visited: ${l + 1} nodes`;
+          l++;
+        } else {
+          clearInterval(sim3LeftInterval);
+          let p = endLeft.previous;
+          while (p && p !== startLeft) {
+            document.getElementById(`sim3-grid-left-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 65);
+
+      // Animate Dijkstra (Right)
+      let r = 0;
+      sim3RightInterval = setInterval(() => {
+        if (r < visitedRightOrder.length) {
+          const node = visitedRightOrder[r];
+          if (!node.isStart && !node.isEnd) {
+            document.getElementById(`sim3-grid-right-${node.r}-${node.c}`).classList.add('sim-node-visited-right');
+          }
+          document.getElementById('sim3-dijkstra-stats').innerText = `Dijkstra Visited: ${r + 1} nodes`;
+          r++;
+        } else {
+          clearInterval(sim3RightInterval);
+          let p = endRight.previous;
+          while (p && p !== startRight) {
+            document.getElementById(`sim3-grid-right-${p.r}-${p.c}`).classList.add('sim-node-path');
+            p = p.previous;
+          }
+        }
+      }, 65);
+    }
+
+    // Safe binding helper to avoid throwing blocking errors if elements are missing or loaded dynamically
+    function safeBindClick(id, handler) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('click', handler);
+      }
+    }
+
+    safeBindClick('prev-slide-btn', prevSlide);
+    safeBindClick('next-slide-btn', nextSlide);
+
+    safeBindClick('run-sim1-btn', runSimulation1);
+    safeBindClick('run-sim2-btn', runSimulation2);
+    safeBindClick('run-sim3-btn', runSimulation3);
+
+    // Initialize all grid systems immediately without waiting for images/assets to load
+    setupSimulation1();
+    setupSimulation2();
+    setupSimulation3();
+    updateSlidePosition();
+  </script>
+
+</body>
+
+</html>
